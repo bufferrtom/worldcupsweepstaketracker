@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Girl &amp; Bear Sweepstake Stat Track</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 2rem 1rem; color: #222; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 1.75rem; font-weight: 600; text-align: center; margin-bottom: 0.25rem; }
+    .subtitle { text-align: center; font-size: 13px; color: #888; margin-bottom: 2rem; }
+    .section-title { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e0e0e0; text-transform: uppercase; letter-spacing: 0.6px; }
+    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .card { background: white; padding: 1.25rem; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .card-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 0.5rem; }
+    .card-value { font-size: 1.4rem; font-weight: 600; color: #111; }
+    .card-value.tbd { color: #ccc; font-size: 1.1rem; font-weight: 400; }
+    .leaderboard { background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+    .lb-header { background: #f9f9f9; padding: 0.875rem 1.25rem; border-bottom: 1px solid #eee; }
+    .lb-title { font-size: 13px; font-weight: 600; color: #333; margin: 0; }
+    .lb-note { font-size: 11px; color: #aaa; margin-top: 3px; }
+    .lb-row { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 8px; padding: 0.75rem 1.25rem; border-bottom: 1px solid #f2f2f2; align-items: center; }
+    .lb-row:last-child { border-bottom: none; }
+    .rank { font-weight: 700; font-size: 13px; color: #ccc; }
+    .rank.gold { color: #c8940a; }
+    .rank.silver { color: #888; }
+    .rank.bronze { color: #a0632a; }
+    .team { font-size: 14px; color: #222; font-weight: 500; }
+    .stat { font-size: 13px; color: #666; font-weight: 600; white-space: nowrap; }
+    .delta { font-size: 11px; font-weight: 600; white-space: nowrap; min-width: 32px; text-align: right; }
+    .delta.up { color: #22a35a; }
+    .delta.down { color: #e03e3e; }
+    .delta.same { color: #ccc; }
+    .lb-empty { padding: 1.5rem; text-align: center; color: #bbb; font-size: 13px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+    @media (max-width: 500px) { .card-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>⚽ Girl & Bear Sweepstake Stat Track</h1>
+  <p class="subtitle" id="lastUpdated">Loading...</p>
+
+  <div class="section-title" style="margin-top:0.5rem">Tournament Results</div>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-label">🥇 Winner</div>
+      <div class="card-value tbd" id="winner">TBD</div>
+    </div>
+    <div class="card">
+      <div class="card-label">🥈 Runner Up</div>
+      <div class="card-value tbd" id="runnerUp">TBD</div>
+    </div>
+    <div class="card">
+      <div class="card-label">🥉 Third Place</div>
+      <div class="card-value tbd" id="thirdPlace">TBD</div>
+    </div>
+  </div>
+
+  <div class="section-title">Leaderboards</div>
+  <div class="grid-2">
+    <div class="leaderboard">
+      <div class="lb-header"><p class="lb-title">Most goals in knockouts</p></div>
+      <div id="lb-knockouts"><div class="lb-empty">No knockout matches yet</div></div>
+    </div>
+    <div class="leaderboard">
+      <div class="lb-header"><p class="lb-title">Most goals scored — group stage</p></div>
+      <div id="lb-groupgoals"><div class="lb-empty">Loading...</div></div>
+    </div>
+    <div class="leaderboard">
+      <div class="lb-header"><p class="lb-title">Most goals conceded — entire tournament</p></div>
+      <div id="lb-conceded"><div class="lb-empty">Loading...</div></div>
+    </div>
+    <div class="leaderboard">
+      <div class="lb-header">
+        <p class="lb-title">Worst team — group stage</p>
+        <p class="lb-note">Ranked by points, then goal difference</p>
+      </div>
+      <div id="lb-worst"><div class="lb-empty">Loading...</div></div>
+    </div>
+    <div class="leaderboard">
+      <div class="lb-header">
+        <p class="lb-title">Dirtiest team — booking pts/game</p>
+        <p class="lb-note">Yellow = 10pts, Red = 25pts</p>
+      </div>
+      <div id="lb-dirty"><div class="lb-empty">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=200&dates=20260611-20260719';
+  const KNOCKOUT_START = new Date('2026-07-04');
+
+  function getDelta(lbId, teamName, ref) {
+    if (!ref || !ref[lbId] || ref[lbId][teamName] === undefined) return null;
+    return ref[lbId][teamName]; // old rank
+  }
+
+  function deltaHtml(currentRank, oldRank) {
+    if (oldRank === null) return '<span class="delta same">new</span>';
+    const diff = oldRank - currentRank; // positive = moved up
+    if (diff === 0) return '<span class="delta same">—</span>';
+    if (diff > 0) return `<span class="delta up">▲${diff}</span>`;
+    return `<span class="delta down">▼${Math.abs(diff)}</span>`;
+  }
+
+  // --- Leaderboard rendering ---
+  function rankLabel(i) { return ['gold','silver','bronze'][i] || ''; }
+
+  function buildLeaderboard(id, rows, ref) {
+    const el = document.getElementById(id);
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div class="lb-empty">No data yet</div>';
+      return;
+    }
+    el.innerHTML = rows.slice(0, 5).map((r, i) => {
+      const oldRank = getDelta(id, r.name, ref);
+      return `
+        <div class="lb-row">
+          <div class="rank ${rankLabel(i)}">${i + 1}</div>
+          <div class="team">${r.name}</div>
+          <div class="stat">${r.display}</div>
+          ${deltaHtml(i + 1, oldRank)}
+        </div>`;
+    }).join('');
+  }
+
+  // --- Data processing ---
+  // cutoff: only include matches completed before this Date (undefined = all)
+  function processEvents(events, cutoff) {
+    const teams = {};
+    function getTeam(name) {
+      if (!teams[name]) teams[name] = { name, groupGoals: 0, groupConceded: 0, groupPoints: 0, groupGD: 0, groupGames: 0, knockoutGoals: 0, knockoutConceded: 0, yellowCards: 0, redCards: 0, cardGames: 0 };
+      return teams[name];
+    }
+
+    let winner = null, runnerUp = null, thirdPlace = null;
+
+    events.forEach(event => {
+      const comp = event.competitions?.[0];
+      if (!comp || !comp.status?.type?.completed) return;
+
+      const competitors = comp.competitors || [];
+      if (competitors.length !== 2) return;
+
+      const home = competitors.find(c => c.homeAway === 'home') || competitors[0];
+      const away = competitors.find(c => c.homeAway === 'away') || competitors[1];
+      const homeName = home.team?.displayName;
+      const awayName = away.team?.displayName;
+      if (!homeName || !awayName) return;
+
+      const homeScore = parseInt(home.score || '0', 10);
+      const awayScore = parseInt(away.score || '0', 10);
+      const matchDate = new Date(event.date || comp.date);
+
+      // Skip matches after the cutoff (used for yesterday snapshot)
+      if (cutoff && matchDate >= cutoff) return;
+
+      const isKnockout = matchDate >= KNOCKOUT_START;
+
+      const roundName = (event.name || '').toLowerCase();
+      const isFinal = roundName.includes('world cup final') || comp.notes?.some(n => n.headline?.toLowerCase().includes('final') && !n.headline?.toLowerCase().includes('third'));
+      const isThird = comp.notes?.some(n => n.headline?.toLowerCase().includes('third'));
+
+      const t1 = getTeam(homeName);
+      const t2 = getTeam(awayName);
+
+      if (!isKnockout) {
+        t1.groupGoals += homeScore; t1.groupConceded += awayScore; t1.groupGames++;
+        t2.groupGoals += awayScore; t2.groupConceded += homeScore; t2.groupGames++;
+        t1.groupGD += homeScore - awayScore; t2.groupGD += awayScore - homeScore;
+        if (homeScore > awayScore) { t1.groupPoints += 3; }
+        else if (awayScore > homeScore) { t2.groupPoints += 3; }
+        else { t1.groupPoints++; t2.groupPoints++; }
+      } else {
+        t1.knockoutGoals += homeScore; t1.knockoutConceded += awayScore;
+        t2.knockoutGoals += awayScore; t2.knockoutConceded += homeScore;
+      }
+
+      const details = comp.details || [];
+      const homeId = home.team?.id;
+      const awayId = away.team?.id;
+      details.forEach(d => {
+        const typeText = (d.type?.text || '').toLowerCase();
+        const teamId = d.team?.id;
+        const isYellow = typeText.includes('yellow');
+        const isRed = typeText.includes('red') && !typeText.includes('yellow');
+        if (teamId === homeId) { if (isYellow) t1.yellowCards++; if (isRed) t1.redCards++; }
+        else if (teamId === awayId) { if (isYellow) t2.yellowCards++; if (isRed) t2.redCards++; }
+      });
+      t1.cardGames++; t2.cardGames++;
+
+      if (isFinal) { winner = homeScore > awayScore ? homeName : awayName; runnerUp = homeScore > awayScore ? awayName : homeName; }
+      if (isThird) { thirdPlace = homeScore > awayScore ? homeName : awayName; }
+    });
+
+    return { teams: Object.values(teams), winner, runnerUp, thirdPlace };
+  }
+
+  // Build a position map from a set of teams for a given leaderboard type
+  function getPositionMap(teams, type) {
+    let sorted = [];
+    if (type === 'knockouts') sorted = teams.filter(t => t.knockoutGoals > 0).sort((a,b) => b.knockoutGoals - a.knockoutGoals);
+    else if (type === 'groupgoals') sorted = teams.filter(t => t.groupGames > 0).sort((a,b) => b.groupGoals - a.groupGoals);
+    else if (type === 'conceded') sorted = teams.filter(t => t.groupGames > 0 || t.knockoutGoals > 0).sort((a,b) => (b.groupConceded + b.knockoutConceded) - (a.groupConceded + a.knockoutConceded));
+    else if (type === 'worst') sorted = teams.filter(t => t.groupGames > 0).sort((a,b) => a.groupPoints !== b.groupPoints ? a.groupPoints - b.groupPoints : a.groupGD - b.groupGD);
+    else if (type === 'dirty') sorted = teams.filter(t => t.cardGames > 0).map(t => ({ ...t, pts: (t.yellowCards * 10 + t.redCards * 25) / t.cardGames })).sort((a,b) => b.pts - a.pts);
+    const map = {};
+    sorted.slice(0, 10).forEach((t, i) => { map[t.name] = i + 1; });
+    return map;
+  }
+
+  // --- Render ---
+  function render(current, yesterday) {
+    const { teams, winner, runnerUp, thirdPlace } = current;
+    const yTeams = yesterday.teams;
+
+    // Build yesterday's position maps for each leaderboard type
+    const yRef = {
+      'lb-knockouts': getPositionMap(yTeams, 'knockouts'),
+      'lb-groupgoals': getPositionMap(yTeams, 'groupgoals'),
+      'lb-conceded':   getPositionMap(yTeams, 'conceded'),
+      'lb-worst':      getPositionMap(yTeams, 'worst'),
+      'lb-dirty':      getPositionMap(yTeams, 'dirty'),
+    };
+
+    const setResult = (id, val) => {
+      const el = document.getElementById(id);
+      if (val) { el.textContent = val; el.classList.remove('tbd'); }
+      else { el.textContent = 'TBD'; el.classList.add('tbd'); }
+    };
+    setResult('winner', winner);
+    setResult('runnerUp', runnerUp);
+    setResult('thirdPlace', thirdPlace);
+
+    const knockoutRows = teams.filter(t => t.knockoutGoals > 0).sort((a,b) => b.knockoutGoals - a.knockoutGoals).map(t => ({ name: t.name, display: `${t.knockoutGoals} goals` }));
+    const groupGoalRows = teams.filter(t => t.groupGames > 0).sort((a,b) => b.groupGoals - a.groupGoals).map(t => ({ name: t.name, display: `${t.groupGoals} goals` }));
+    const concededRows = teams.filter(t => t.groupGames > 0 || t.knockoutGoals > 0).map(t => ({ name: t.name, total: t.groupConceded + t.knockoutConceded })).sort((a,b) => b.total - a.total).map(t => ({ name: t.name, display: `${t.total} conceded` }));
+    const worstRows = teams.filter(t => t.groupGames > 0).sort((a,b) => a.groupPoints !== b.groupPoints ? a.groupPoints - b.groupPoints : a.groupGD - b.groupGD).map(t => ({ name: t.name, display: `${t.groupPoints}pts (${t.groupGD >= 0 ? '+' : ''}${t.groupGD})` }));
+
+    buildLeaderboard('lb-knockouts', knockoutRows, yRef);
+    buildLeaderboard('lb-groupgoals', groupGoalRows, yRef);
+    buildLeaderboard('lb-conceded', concededRows, yRef);
+    buildLeaderboard('lb-worst', worstRows, yRef);
+
+    const hasCards = teams.some(t => t.yellowCards > 0 || t.redCards > 0);
+    if (hasCards) {
+      const dirtyRows = teams.filter(t => t.cardGames > 0).map(t => ({ name: t.name, pts: (t.yellowCards * 10 + t.redCards * 25) / t.cardGames })).sort((a,b) => b.pts - a.pts).map(t => ({ name: t.name, display: `${t.pts.toFixed(1)} pts/g` }));
+      buildLeaderboard('lb-dirty', dirtyRows, yRef);
+    } else {
+      document.getElementById('lb-dirty').innerHTML = '<div class="lb-empty">Card data not yet in feed</div>';
+    }
+  }
+
+  async function fetchData() {
+    try {
+      const res = await fetch(ESPN_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      const events = json.events || [];
+      if (!events.length) { document.getElementById('lastUpdated').textContent = 'No events found — check back soon'; return; }
+
+      // Yesterday = midnight at start of today (local time)
+      const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+
+      const current = processEvents(events);
+      const yesterday = processEvents(events, todayMidnight);
+
+      render(current, yesterday);
+      document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString('en-GB')} · Data via ESPN · Auto-refreshes every 5 mins`;
+    } catch(e) {
+      document.getElementById('lastUpdated').textContent = 'Error loading — retrying in 5 mins';
+      console.error(e);
+    }
+  }
+
+  fetchData();
+  setInterval(fetchData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
